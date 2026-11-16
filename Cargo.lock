@@ -926,7 +926,7 @@ checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 [[package]]
 name = "noise"
 version = "0.5.1"
-source = "git+https://github.com/Razaekel/noise-rs?rev=4606a00#4606a00c10fb10fb1619bb2a51d5868f20227674"
+source = "git+https://github.com/Razaekel/noise-rs?rev=4606a00c10fb10fb1619bb2a51d5868f20227674#4606a00c10fb10fb1619bb2a51d5868f20227674"
 dependencies = [
  "rand 0.5.6",
 ]
@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "rust-embed-flag"
 version = "3.0.1"
-source = "git+https://github.com/aeickhoff/rust-embed#3f1ce67f01884d895d0d522d32481232a64481df"
+source = "git+https://github.com/aeickhoff/rust-embed?rev=3f1ce67f01884d895d0d522d32481232a64481df#3f1ce67f01884d895d0d522d32481232a64481df"
 dependencies = [
  "quote 0.3.15",
  "syn 0.11.11",

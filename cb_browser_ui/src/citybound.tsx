@@ -119,7 +119,9 @@ export function ToWindowPortal(props: { children: React.ReactNode }) {
 
 window.update = update;
 
-import('../target/wasm32-unknown-unknown/release/cb_browser_ui').then(mod => mod.default as CBRustAPI).then(cbRustBrowser => {
+// `./rust` re-exports the cargo-web glue's promise unchanged; taking it
+// straight from the CommonJS module makes bundlers hand back a fake promise.
+import('./rust').then(mod => mod.default as CBRustAPI).then(cbRustBrowser => {
     window.cbRustBrowser = cbRustBrowser;
 
     const settingSpecs = {

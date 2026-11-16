@@ -51,6 +51,28 @@ Recommended setup:
 
 * Open the displayed address in your browser
 
+## Build system notes (this fork)
+
+The original build setup stopped working years ago (older than the code itself):
+`cargo-web 0.6.24` can no longer be installed, `parcel-bundler` needs a native
+`deasync` module that does not build on current Node, and the code did not compile
+on the Windows backend at all. This fork keeps the game buildable:
+
+* **Rust is pinned to `nightly-2020-03-10`** by `rust-toolchain.toml`. Several
+  dependencies (`compact`, `chunky`, …) use nightly-only features that have since
+  been removed from the compiler, so a newer toolchain cannot build them. Don't
+  "upgrade" the pin without replacing those crates first.
+* **`cargo-web` is pinned to `0.6.26`** (installed by `npm run ensure-tooling`).
+  The browser UI is a `stdweb` 0.4 / `cargo-web` app; moving off it means a rewrite
+  to `wasm-bindgen`.
+* **The JS bundle is built with `esbuild`** (`cb_browser_ui/buildJs.js`) and the
+  stylesheet with `lessc`, replacing `parcel-bundler` 1.x.
+* `cb_util/src/config_manager/mod.rs` used the macOS-only `notify::FsEventWatcher`
+  type; it now uses `notify::RecommendedWatcher`, which is what `notify::watcher()`
+  actually returns on every platform.
+* Git dependencies (`rust-embed-flag`, `noise`) are pinned to commit SHAs so the
+  build does not drift when their branches move.
+
 ## Guidelines
 
 * **Make sure to <a href="https://www.clahub.com/agreements/citybound/citybound">sign the Contributor License Agreement</a>.**

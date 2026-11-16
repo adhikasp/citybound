@@ -5,6 +5,19 @@ use self::rouille::{Response, extension_to_mime};
 #[folder = "cb_browser_ui/dist/"]
 struct Asset;
 
+// `rust-embed` keys embedded files by the platform's path separator, so on
+// Windows everything below the top level is stored with backslashes while URLs
+// always use forward slashes.
+fn get_asset(url_path: &str) -> Option<Vec<u8>> {
+    Asset::get(url_path).or_else(|| {
+        if cfg!(windows) {
+            Asset::get(&url_path.replace('/', "\\"))
+        } else {
+            None
+        }
+    })
+}
+
 pub fn start_browser_ui_server(version: &'static str, network_config: ::init::NetworkConfig) {
     rouille::start_server(network_config.serve_host_port.clone(), move |request| {
         if request.raw_url() == "/" {
@@ -32,7 +45,7 @@ pub fn start_browser_ui_server(version: &'static str, network_config: ::init::Ne
                 );
 
             Response::html(rendered)
-        } else if let Some(asset) = Asset::get(&request.url()[1..]) {
+        } else if let Some(asset) = get_asset(&request.url()[1..]) {
             Response::from_data(
                 if request.url().ends_with(".wasm") {
                     "application/wasm"

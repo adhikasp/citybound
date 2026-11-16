@@ -1,10 +1,14 @@
 {
   "scripts": {
-    "build-js": "parcel build index.html --no-minify --log-level 3",
-    "watch-js": "parcel watch index.html --no-hmr --log-level 3",
+    "build-css": "lessc --js main.less dist/main.css",
+    "build-js-bundle": "node buildJs.js",
+    "build-html": "node buildHtml.js",
+    "build-js": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && npm run build-css && npm run build-js-bundle && npm run build-html",
+    "watch-js": "node buildJs.js --watch",
     "build-rust": "cargo-web build --release && node copyWasm.js",
     "build": "npm run build-rust && npm run build-js",
-    "start": "npm run build-rust && npm run watch-js"
+    "start": "npm run build-rust && npm run watch-js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "antd": "^3.19.2",
@@ -23,12 +27,9 @@
     "@types/gl-matrix": "^2.4.5",
     "@types/react-dom": "^16.9.6",
     "@types/stacktrace-js": "^2.0.3",
+    "esbuild": "^0.28.2",
     "less": "^3.8.1",
-    "parcel-bundler": "^1.12.4",
     "typescript": "^3.8.3"
-  },
-  "less": {
-    "javascriptEnabled": true
   },
   "browser": {
     "fs": false

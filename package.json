@@ -1,21 +1,23 @@
 {
     "scripts": {
         "ensure-tooling": "node repo_scripts/tooling.js",
-        "build-browser": "cd cb_browser_ui && npm install && npm run build",
-        "watch-browser": "cd cb_browser_ui && npm install && npm start",
-        "build-server": "git describe > .version && npm run ensure-tooling -- -q && cargo build --release",
+        "install-browser": "cd cb_browser_ui && npm install --no-audit --no-fund",
+        "build-browser": "cd cb_browser_ui && npm install --no-audit --no-fund && npm run build",
+        "watch-browser": "cd cb_browser_ui && npm install --no-audit --no-fund && npm start",
         "build-server-debug": "git describe > .version && npm run ensure-tooling -- -q && cargo build",
+        "build-server": "git describe > .version && npm run ensure-tooling -- -q && cargo build --release",
         "build-server-bundle": "git describe > .version && npm run ensure-tooling -- -q && cargo build --release --features embed_assets",
-        "build": "echo 'BUILDING SERVER' && npm run build-server && echo 'BUILDING BROWSER UI' && npm run build-browser",
-        "start": "npm run build-server && echo 'RUNNING' && target/release/citybound",
+        "build": "npm run build-browser && npm run build-server-bundle",
+        "start": "npm run build-server-bundle && echo 'RUNNING' && target/release/citybound",
+        "start-debug": "npm run build-server-debug && echo 'RUNNING' && target/debug/citybound",
         "lint-clippy-server": "echo 'CHECKING BEST PRACTISES (cb_simulation)' && touch cb_simulation/src/lib.rs && cargo clippy",
         "lint-clippy-browser": "echo 'CHECKING BEST PRACTISES (cb_browser_ui) -- IGNORE js_export RELATED ERRORS' && touch cb_browser_ui/src/lib.rs && cd cb_browser_ui && (cargo clippy || true) && cd ..",
         "lint-clippy": "npm run lint-clippy-server && npm run lint-clippy-browser",
         "lint-fmt": "echo 'CHECKING/FIXING FORMATTING' && cargo fmt -- ./cb_browser_ui/src/lib.rs ./cb_planning/src/lib.rs ./cb_server/main.rs ./cb_simulation/src/lib.rs ./cb_time/src/lib.rs ./cb_util/src/lib.rs",
-        "lint-fmt-check": "echo 'CHECKING FORMATTING' && cargo fmt -- ./cb_browser_ui/src/lib.rs ./cb_planning/src/lib.rs ./cb_server/main.rs ./cb_simulation/src/lib.rs ./cb_time/src/lib.rs ./cb_util/src/lib.rs  --check",
+        "lint-fmt-check": "echo 'CHECKING FORMATTING' && cargo fmt -- ./cb_browser_ui/src/lib.rs ./cb_planning/src/lib.rs ./cb_server/main.rs ./cb_simulation/src/lib.rs ./cb_time/src/lib.rs ./cb_util/src/lib.rs --check",
         "lint": "npm run lint-clippy && npm run lint-fmt",
         "lint-check": "npm run lint-clippy && npm run lint-fmt-check",
-        "clean-codegen": "find . -name 'kay_auto.rs' -delete"
+        "clean-codegen": "node -e \"const fs=require('fs'),path=require('path');(function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory()){if(!['node_modules','target'].includes(e.name))walk(p)}else if(e.name==='kay_auto.rs'){fs.unlinkSync(p);console.log('deleted '+p)}}})('.')\""
     },
     "dependencies": {}
 }

@@ -1,9 +1,16 @@
 const util = require('util');
 const { execSync, spawnSync } = require('child_process');
 
+// The project is pinned to a 2020 nightly because several of its dependencies
+// (`compact`, `chunky`, ...) use nightly-only features that have since been
+// removed from the compiler, and the browser UI is built with `cargo-web`,
+// which stopped working with later toolchains.
+// `rust-toolchain.toml` in the repository root selects this toolchain for
+// everything built inside the repo.
 const NIGHTLY_VERSION = "nightly-2020-03-10";
-const NIGHTLY_VERSION_BROWSER = "nightly-2020-03-10";
-const CARGO_WEB_VERSION = "0.6.24";
+// cargo-web 0.6.24 can no longer be installed from source (its macOS-only
+// dependency tree resolves to yanked crates); 0.6.26 is a drop-in replacement.
+const CARGO_WEB_VERSION = "0.6.26";
 let quiet = process.argv[2] == "-q";
 
 let rustupV;
@@ -14,56 +21,40 @@ try {
 }
 
 if (rustupV && rustupV.startsWith("rustup")) {
-    !quiet && console.log("Rustup installed ✅ (OK)");
+    !quiet && console.log("Rustup installed ? (OK)");
 } else {
-    console.log("Rustup missing! 🛑 (FAIL)");
+    console.log("Rustup missing! ?? (FAIL)");
     console.log("Please install from https://rustup.rs");
     process.exit(1);
 }
 
 function ensureRustNightly(nightly) {
-    let rustupShow = execSync('rustup show', { encoding: 'utf8' });
+    const installed = execSync('rustup toolchain list', { encoding: 'utf8' });
+    const hasToolchain = installed.split(/\r?\n/).some(l => l.trim().startsWith(nightly));
 
-    let activeToolchains = (rustupShow.match(/^(.+?)\s+\(directory override(.+?)$/m) || [null, null])[1];
-
-    if (activeToolchains && activeToolchains.includes(nightly)) {
-        !quiet && console.log("Correct rust nightly set up ✅ (OK)");
-        correctToolchain = true;
-    } else {
-        console.log("Wrong version of rust set up ❗️(!)");
-        console.log(rustupShow.split(/\n/g).map(s => " | " + s).join("\n"));
-        console.log("🔧 Overriding with correct nightly (only for this directory)...");
-        const nightlySuffix = process.platform === "win32"
-            ? "-x86_64-pc-windows-msvc"
-            : (process.platform === "darwin"
-                ? "-x86_64-apple-darwin"
-                : "-x86_64-unknown-linux-gnu");
-        const fullVersion = nightly + nightlySuffix;
-        console.log("> rustup override set " + fullVersion);
-        spawnSync("rustup", ["override", "set", fullVersion], { stdio: 'inherit' });
+    if (!hasToolchain) {
+        console.log("Rust toolchain " + nightly + " missing ??(!)");
+        console.log("?? Installing " + nightly);
+        spawnSync("rustup", ["toolchain", "install", nightly, "--profile", "minimal"], { stdio: 'inherit' });
         quiet = false;
+    }
 
-        let rustupShow2 = execSync('rustup show', { encoding: 'utf8' });
+    // the browser UI compiles to WebAssembly
+    spawnSync("rustup", ["target", "add", "wasm32-unknown-unknown", "--toolchain", nightly],
+        { stdio: quiet ? 'ignore' : 'inherit' }
+    );
 
-        let activeToolchains2 = (rustupShow2.match(/^(.+?)\s+\(directory override(.+?)$/m) || [null, null])[1];
-        if (activeToolchains2 && activeToolchains2.includes(nightly)) {
-            !quiet && console.log("Correct rust nightly set up ✅ (OK)");
-        } else {
-            console.log("Failed to install correct toolchain 🛑 (FAIL)");
-            console.log("rustup show output:");
-            console.log(rustupShow2);
-            process.exit(1);
-        }
+    const after = execSync('rustup toolchain list', { encoding: 'utf8' });
+    if (after.split(/\r?\n/).some(l => l.trim().startsWith(nightly))) {
+        !quiet && console.log("Correct rust nightly set up ? (OK)");
+    } else {
+        console.log("Failed to install correct toolchain ?? (FAIL)");
+        process.exit(1);
     }
 }
 
-!quiet && console.log("Checking rust nightly for simulation");
+!quiet && console.log("Checking rust nightly");
 ensureRustNightly(NIGHTLY_VERSION);
-
-process.chdir('./cb_browser_ui');
-
-!quiet && console.log("Checking rust nightly for browser");
-ensureRustNightly(NIGHTLY_VERSION_BROWSER);
 
 !quiet && console.log("Checking cargo-web version");
 
@@ -81,10 +72,10 @@ function checkCargoWeb(requiredVersion) {
 }
 
 if (checkCargoWeb(CARGO_WEB_VERSION)) {
-    !quiet && console.log("Correct cargo-web set up ✅ (OK)");
+    !quiet && console.log("Correct cargo-web set up ? (OK)");
 } else {
-    !quiet && console.log("Correct cargo-web not installed yet ❗️(!)");
-    console.log("🔧 Installing cargo-web");
+    !quiet && console.log("Correct cargo-web not installed yet ??(!)");
+    console.log("?? Installing cargo-web");
 
     let platform = require("os").platform();
 
@@ -97,26 +88,26 @@ if (checkCargoWeb(CARGO_WEB_VERSION)) {
         console.log(execSync('mkdir -p ~/.cargo/bin', { encoding: 'utf8' }));
         console.log(execSync('mv cargo-web ~/.cargo/bin', { encoding: 'utf8' }));
     } else {
-        spawnSync("cargo", ["install", "cargo-web", "--force", "--vers", CARGO_WEB_VERSION],
+        // build it with the current stable toolchain: the 2020 nightly's cargo
+        // can no longer resolve cargo-web's dependency tree
+        spawnSync("cargo", ["+stable", "install", "cargo-web", "--force", "--vers", CARGO_WEB_VERSION],
             { stdio: quiet ? 'ignore' : 'inherit' }
         );
     }
 
     if (checkCargoWeb(CARGO_WEB_VERSION)) {
-        !quiet && console.log("Correct cargo-web set up ✅ (OK)");
+        !quiet && console.log("Correct cargo-web set up ? (OK)");
     } else {
-        console.log("Failed to install cargo-web 🛑 (FAIL)");
+        console.log("Failed to install cargo-web ?? (FAIL)");
         process.exit(1);
     }
 }
 
-process.chdir('..');
-
-!quiet && console.log("🔧 Ensuring linting tools are installed...");
+!quiet && console.log("?? Ensuring linting tools are installed...");
 spawnSync("rustup", ["component", "add", "rustfmt-preview", "--toolchain", NIGHTLY_VERSION],
     { stdio: quiet ? 'ignore' : 'inherit' }
 );
 spawnSync("rustup", ["component", "add", "clippy-preview", "--toolchain", NIGHTLY_VERSION],
     { stdio: quiet ? 'ignore' : 'inherit' }
 );
-!quiet && console.log("Linting tools set up ✅ (OK)");
+!quiet && console.log("Linting tools set up ? (OK)");
