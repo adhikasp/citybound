@@ -27,3 +27,6 @@ kay_codegen = {version = "0.3.10", features = ["serde-serialization"]}
 
 [profile.release]
 debug = true
+[patch.crates-io]
+kay = { path = "../vendor/kay" }
+chunky = { path = "../vendor/chunky" }

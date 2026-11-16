@@ -39,3 +39,9 @@ codegen-units = 4
 
 [features]
 embed_assets = ["rust-embed-flag/embed_assets"]
+# Kernel crates of the simulation (kay, chunky) were published in 2020 and use
+# nightly features that have since been removed or changed. They are vendored
+# under vendor/ with minimal fixes so the project builds on a current nightly.
+[patch.crates-io]
+kay = { path = "vendor/kay" }
+chunky = { path = "vendor/chunky" }
