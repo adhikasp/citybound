@@ -8,9 +8,11 @@ use std::collections::HashMap;
 #[cfg(feature = "server")]
 use std::net::{TcpListener, TcpStream};
 #[cfg(feature = "browser")]
-use stdweb::traits::{IEventTarget, IMessageEvent};
+use wasm_bindgen::prelude::*;
 #[cfg(feature = "browser")]
-use stdweb::web::{SocketBinaryType, SocketReadyState, TypedArray, WebSocket};
+use wasm_bindgen::JsCast;
+#[cfg(feature = "browser")]
+use web_sys::{BinaryType, MessageEvent, WebSocket};
 #[cfg(feature = "server")]
 use tungstenite::util::NonBlockingError;
 #[cfg(feature = "server")]
@@ -536,12 +538,12 @@ pub struct Connection {
     websocket: WebSocket,
     in_queue: Rc<RefCell<VecDeque<Vec<u8>>>>,
     got_machine_id: Rc<RefCell<bool>>,
+    // the message listener is dropped (and stops firing) when its `Closure` is
+    // dropped, so the connection has to keep it alive for as long as it lives
+    _on_message: Closure<dyn FnMut(MessageEvent)>,
     out_batches: Vec<Vec<u8>>,
     batch_message_bytes: usize,
 }
-
-#[cfg(feature = "browser")]
-use stdweb::web::event::SocketMessageEvent;
 
 #[cfg(feature = "browser")]
 impl Connection {
@@ -551,20 +553,27 @@ impl Connection {
         let got_machine_id = Rc::new(RefCell::new(false));
         let got_machine_id_for_listener = got_machine_id.clone();
 
-        websocket.set_binary_type(SocketBinaryType::ArrayBuffer);
-        websocket.add_event_listener(move |event: SocketMessageEvent| {
+        websocket.set_binary_type(BinaryType::Arraybuffer);
+
+        let on_message = Closure::wrap(Box::new(move |event: MessageEvent| {
             let mut got_machine_id = got_machine_id_for_listener.borrow_mut();
             if *got_machine_id {
                 in_queue_for_listener.borrow_mut().push_back({
-                    let typed_array: TypedArray<u8> =
-                        event.data().into_array_buffer().unwrap().into();
-                    typed_array.to_vec()
+                    let array_buffer = event.data().dyn_into::<js_sys::ArrayBuffer>().unwrap();
+                    let typed_array = js_sys::Uint8Array::new(&array_buffer);
+                    let mut bytes = vec![0; typed_array.length() as usize];
+                    typed_array.copy_to(&mut bytes);
+                    bytes
                 })
             } else {
                 // ignore first packet
                 *got_machine_id = true;
             }
-        });
+        }) as Box<dyn FnMut(MessageEvent)>);
+
+        websocket
+            .add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref())
+            .unwrap();
 
         Connection {
             n_turns: 0,
@@ -572,6 +581,7 @@ impl Connection {
             websocket,
             in_queue,
             got_machine_id,
+            _on_message: on_message,
             out_batches: vec![Vec::with_capacity(batch_message_bytes)],
             batch_message_bytes,
         }
@@ -602,9 +612,9 @@ impl Connection {
     }
 
     pub fn try_send_pending(&mut self) -> Result<(), ::std::io::Error> {
-        if self.websocket.ready_state() == SocketReadyState::Open {
+        if self.websocket.ready_state() == WebSocket::OPEN {
             for batch in self.out_batches.drain(..) {
-                self.websocket.send_bytes(&batch).unwrap();
+                self.websocket.send_with_u8_array(&batch).unwrap();
             }
 
             self.out_batches

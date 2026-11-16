@@ -38,9 +38,18 @@ optional = true
 version = "1.0"
 optional = true
 
-[dependencies.stdweb]
-version = "0.4.7"
+[dependencies.wasm-bindgen]
+version = "0.2"
 optional = true
+
+[dependencies.js-sys]
+version = "0.3"
+optional = true
+
+[dependencies.web-sys]
+version = "0.3"
+optional = true
+features = ["BinaryType", "Event", "EventTarget", "MessageEvent", "WebSocket"]
 
 [dependencies.tungstenite]
 version = "0.5.3"
@@ -51,7 +60,7 @@ default-features = false
 version = "1.7.2"
 
 [features]
-browser = ["stdweb"]
+browser = ["wasm-bindgen", "js-sys", "web-sys"]
 default = ["server"]
 serde-serialization = ["serde", "serde_derive"]
 server = ["tungstenite", "chunky/mmap"]

@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use descartes::LinePath;
 use michelangelo::{MeshGrouper, Instance};
 use browser_utils::{FrameListener, FrameListenerID, flatten_instances, updated_groups_to_js};
+use wasm_bindgen::prelude::*;
+
+use js;
 
 #[derive(Compact, Clone)]
 pub struct BrowserTransportUI {
@@ -67,32 +70,17 @@ impl FrameListener for BrowserTransportUI {
             car_instances.extend_from_slice(lane_instances);
         }
 
-        let car_instances_js: ::stdweb::web::TypedArray<f32> =
-            flatten_instances(&car_instances).into();
+        js::call(
+            "carInstances",
+            &[js::f32_array(flatten_instances(&car_instances))],
+        );
 
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                transport: {rendering: {
-                    carInstances: {"$set": @{car_instances_js}}
-                }}
-            }))
+        if let Some(car_colors) = js::from_js::<Vec<[f64; 3]>>(js::call0("carColors")) {
+            self.car_colors = car_colors
+                .into_iter()
+                .map(|color| [color[0] as f32, color[1] as f32, color[2] as f32])
+                .collect();
         }
-
-        use ::stdweb::unstable::TryInto;
-
-        let car_color_vals: Vec<::stdweb::Value> = js! {
-            return require("../../../src/colors").default.carColors;
-        }
-        .try_into()
-        .unwrap();
-
-        self.car_colors = car_color_vals
-            .into_iter()
-            .map(|color_val| {
-                let color: Vec<f64> = color_val.try_into().unwrap();
-                [color[0] as f32, color[1] as f32, color[2] as f32]
-            })
-            .collect();
     }
 }
 
@@ -113,54 +101,45 @@ impl TransportUI for BrowserTransportUI {
                 .lane_marker_gaps_grouper
                 .update(None, Some((id, switch_marker_gap_mesh(lane_path))));
 
-            js! {
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    transport: {rendering: {
-                        laneMarkerGapGroups: {
-                            "$add": @{updated_groups_to_js(
-                                updated_lane_marker_gaps_groups
-                            )}
-                        }
-                    }}
-                }));
-            }
+            js::call(
+                "laneGroups",
+                &[
+                    JsValue::from_str("laneMarkerGapGroups"),
+                    updated_groups_to_js(updated_lane_marker_gaps_groups),
+                ],
+            );
         } else {
             let mesh = lane_mesh(lane_path);
             let updated_asphalt_groups = self.asphalt_grouper.update(None, Some((id, mesh)));
 
             if on_intersection {
-                js! {
-                    window.cbReactApp.boundSetState(oldState => update(oldState, {
-                        transport: {rendering: {
-                            laneAsphaltGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_asphalt_groups
-                                )}
-                            }
-                        }}
-                    }));
-                }
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneAsphaltGroups"),
+                        updated_groups_to_js(updated_asphalt_groups),
+                    ],
+                );
             } else {
                 let marker_meshes = marker_mesh(lane_path);
                 let updated_lane_marker_groups = self
                     .lane_marker_grouper
                     .update(None, Some((id, marker_meshes.0 + marker_meshes.1)));
-                js! {
-                    window.cbReactApp.boundSetState(oldState => update(oldState, {
-                        transport: {rendering: {
-                            laneAsphaltGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_asphalt_groups
-                                )}
-                            },
-                            laneMarkerGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_lane_marker_groups
-                                )}
-                            }
-                        }}
-                    }));
-                }
+
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneAsphaltGroups"),
+                        updated_groups_to_js(updated_asphalt_groups),
+                    ],
+                );
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneMarkerGroups"),
+                        updated_groups_to_js(updated_lane_marker_groups),
+                    ],
+                );
             }
         }
     }
@@ -176,50 +155,41 @@ impl TransportUI for BrowserTransportUI {
             let updated_lane_marker_gaps_groups =
                 self.lane_marker_gaps_grouper.update(Some(id), None);
 
-            js! {
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    transport: {rendering: {
-                        laneMarkerGapGroups: {
-                            "$add": @{updated_groups_to_js(
-                                updated_lane_marker_gaps_groups
-                            )}
-                        }
-                    }}
-                }));
-            }
+            js::call(
+                "laneGroups",
+                &[
+                    JsValue::from_str("laneMarkerGapGroups"),
+                    updated_groups_to_js(updated_lane_marker_gaps_groups),
+                ],
+            );
         } else {
             let updated_asphalt_groups = self.asphalt_grouper.update(Some(id), None);
 
             if on_intersection {
-                js! {
-                    window.cbReactApp.boundSetState(oldState => update(oldState, {
-                        transport: {rendering: {
-                            laneAsphaltGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_asphalt_groups
-                                )}
-                            }
-                        }}
-                    }));
-                }
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneAsphaltGroups"),
+                        updated_groups_to_js(updated_asphalt_groups),
+                    ],
+                );
             } else {
                 let updated_lane_marker_groups = self.lane_marker_grouper.update(Some(id), None);
-                js! {
-                    window.cbReactApp.boundSetState(oldState => update(oldState, {
-                        transport: {rendering: {
-                            laneAsphaltGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_asphalt_groups
-                                )}
-                            },
-                            laneMarkerGroups: {
-                                "$add": @{updated_groups_to_js(
-                                    updated_lane_marker_groups
-                                )}
-                            }
-                        }}
-                    }));
-                }
+
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneAsphaltGroups"),
+                        updated_groups_to_js(updated_asphalt_groups),
+                    ],
+                );
+                js::call(
+                    "laneGroups",
+                    &[
+                        JsValue::from_str("laneMarkerGroups"),
+                        updated_groups_to_js(updated_lane_marker_groups),
+                    ],
+                );
             }
         }
     }

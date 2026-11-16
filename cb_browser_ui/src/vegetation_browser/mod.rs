@@ -6,6 +6,9 @@ use descartes::{P2, LinePath, ClosedLinePath, PrimitiveArea};
 use michelangelo::{Sculpture, FlatSurface, Instance};
 use std::collections::HashMap;
 use browser_utils::{FrameListener, FrameListenerID, flatten_instances};
+use wasm_bindgen::prelude::*;
+
+use js;
 
 #[derive(Compact, Clone)]
 pub struct BrowserVegetationUI {
@@ -122,16 +125,15 @@ impl BrowserVegetationUI {
         ])
         .to_mesh();
 
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                vegetation: {
-                    trunkMesh: {"$set": @{to_js_mesh(&trunk_mesh)}},
-                    mediumCanopyMesh: {"$set": @{to_js_mesh(&medium_canopy_mesh)}},
-                    smallCanopyMesh:  {"$set": @{to_js_mesh(&small_canopy_mesh)}},
-                    largeCanopyMesh:  {"$set": @{to_js_mesh(&large_canopy_mesh)}},
-                },
-            }));
-        }
+        js::call(
+            "vegetationMeshes",
+            &[js::object(vec![
+                ("trunk", to_js_mesh(&trunk_mesh)),
+                ("medium", to_js_mesh(&medium_canopy_mesh)),
+                ("small", to_js_mesh(&small_canopy_mesh)),
+                ("large", to_js_mesh(&large_canopy_mesh)),
+            ])],
+        );
 
         {
             PlantID::global_broadcast(world).get_render_info(id.into(), world);
@@ -149,42 +151,26 @@ impl BrowserVegetationUI {
     }
 }
 
+fn color_from_js(value: JsValue) -> Option<[f32; 3]> {
+    js::from_js::<[f64; 3]>(value).map(|color| {
+        [color[0] as f32, color[1] as f32, color[2] as f32]
+    })
+}
+
 impl FrameListener for BrowserVegetationUI {
     fn on_frame(&mut self, _: &mut World) {
-        use ::stdweb::unstable::TryInto;
-
-        let new_trunk_color_js: Vec<f64> = js! {
-            return require("../../../src/colors").default.trunks;
-        }
-        .try_into()
-        .unwrap();
-
-        let new_trunk_color = [
-            new_trunk_color_js[0] as f32,
-            new_trunk_color_js[1] as f32,
-            new_trunk_color_js[2] as f32,
-        ];
-
-        if self.trunk_color != new_trunk_color {
-            self.trunk_color = new_trunk_color;
-            self.instances_current = false;
+        if let Some(new_trunk_color) = color_from_js(js::call0("trunkColor")) {
+            if self.trunk_color != new_trunk_color {
+                self.trunk_color = new_trunk_color;
+                self.instances_current = false;
+            }
         }
 
-        let new_canopy_color_js: Vec<f64> = js! {
-            return require("../../../src/colors").default.canopies;
-        }
-        .try_into()
-        .unwrap();
-
-        let new_canopy_color = [
-            new_canopy_color_js[0] as f32,
-            new_canopy_color_js[1] as f32,
-            new_canopy_color_js[2] as f32,
-        ];
-
-        if self.canopy_color != new_canopy_color {
-            self.canopy_color = new_canopy_color;
-            self.instances_current = false;
+        if let Some(new_canopy_color) = color_from_js(js::call0("canopyColor")) {
+            if self.canopy_color != new_canopy_color {
+                self.canopy_color = new_canopy_color;
+                self.instances_current = false;
+            }
         }
 
         if !self.instances_current {
@@ -281,30 +267,24 @@ impl FrameListener for BrowserVegetationUI {
                 })
                 .collect::<Vec<_>>();
 
-            let trunk_instances_js: ::stdweb::web::TypedArray<f32> =
-                flatten_instances(&trunk_instances).into();
-
-            let small_canopy_instances_js: ::stdweb::web::TypedArray<f32> =
-                flatten_instances(&small_canopy_instances).into();
-
-            let medium_canopy_instances_js: ::stdweb::web::TypedArray<f32> =
-                flatten_instances(&medium_canopy_instances).into();
-
-            let large_canopy_instances_js: ::stdweb::web::TypedArray<f32> =
-                flatten_instances(&large_canopy_instances).into();
-
-            js! {
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    vegetation: {
-                        trunkInstances: {"$set": @{trunk_instances_js}},
-                        smallCanopyInstances: {"$set": @{small_canopy_instances_js}},
-                        mediumCanopyInstances: {"$set": @{medium_canopy_instances_js}},
-                        largeCanopyInstances: {"$set": @{large_canopy_instances_js}}
-                    }
-                }));
-
-                console.log("Rebuilt vegetation");
-            }
+            js::call(
+                "vegetationInstances",
+                &[js::object(vec![
+                    ("trunk", js::f32_array(flatten_instances(&trunk_instances))),
+                    (
+                        "small",
+                        js::f32_array(flatten_instances(&small_canopy_instances)),
+                    ),
+                    (
+                        "medium",
+                        js::f32_array(flatten_instances(&medium_canopy_instances)),
+                    ),
+                    (
+                        "large",
+                        js::f32_array(flatten_instances(&large_canopy_instances)),
+                    ),
+                ])],
+            );
 
             self.instances_current = true;
         }

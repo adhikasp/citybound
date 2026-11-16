@@ -1,20 +1,22 @@
 #![recursion_limit = "256"]
-// TODO: remove once https://github.com/rust-lang/rust/issues/54726 is resolved
+// kay_codegen emits #![rustfmt::skip] into the generated kay_auto.rs files
 #![feature(custom_inner_attributes)]
 
-#[macro_use]
-extern crate stdweb;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use stdweb::js_export;
+
+extern crate serde;
 
 #[macro_use]
 extern crate serde_derive;
 
-extern crate kay;
-use kay::{ActorSystem, TypedID};
-
 #[macro_use]
 extern crate compact_macros;
+
+extern crate wasm_bindgen;
+extern crate js_sys;
+extern crate web_sys;
+
+extern crate kay;
+use kay::{ActorSystem, TypedID};
 
 extern crate cb_simulation;
 use cb_simulation::*;
@@ -24,6 +26,11 @@ extern crate cb_time;
 extern crate cb_planning;
 
 use std::panic;
+
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+
+pub mod js;
 
 pub mod planning_browser;
 pub mod debug;
@@ -37,39 +44,35 @@ pub mod browser_utils;
 // TODO: not thread safe for now
 static mut SYSTEM: *mut ActorSystem = 0 as *mut ActorSystem;
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
+#[allow(static_mut_refs)]
+fn system() -> &'static mut ActorSystem {
+    unsafe { &mut *SYSTEM }
+}
+
+#[wasm_bindgen]
 pub fn start() {
     panic::set_hook(Box::new(|info| {
-        js! {
-            throw new Error("Rust WASM error: " + @{info.to_string()});
-        }
+        js::call("panic", &[JsValue::from_str(&info.to_string())]);
     }));
 
-    js! { console.log("Before setup") }
+    js::console_log("Before setup");
 
-    let server_host = js! {
-        return window.location.hostname;
-    }
-    .into_string()
-    .unwrap();
+    let server_host = js::call0("hostname").as_string().unwrap_or_default();
 
-    let mut network_settings = ::std::collections::HashMap::from(
-        js! {
-            return window.cbNetworkSettings;
-        }
-        .into_object()
-        .unwrap(),
+    let network_settings_js = js::call0("networkSettings");
+    let network_settings: std::collections::HashMap<String, f64> =
+        js::from_js(network_settings_js).unwrap_or_default();
+
+    let mut system = kay::ActorSystem::new(
+        kay::Networking::new(
+            1,
+            vec![format!("{}:{}", server_host, 9999), "ws-client".to_owned()],
+            network_settings["batchMessageBytes"] as usize,
+            network_settings["acceptableTurnDistance"] as usize,
+            network_settings["skipTurnsPerTurnAhead"] as usize,
+        ),
+        kay::Tuning::default(),
     );
-
-    use stdweb::unstable::TryFrom;
-
-    let mut system = kay::ActorSystem::new(kay::Networking::new(
-        1,
-        vec![format!("{}:{}", server_host, 9999), "ws-client".to_owned()],
-        u32::try_from(network_settings.remove("batchMessageBytes").unwrap()).unwrap() as usize,
-        u32::try_from(network_settings.remove("acceptableTurnDistance").unwrap()).unwrap() as usize,
-        u32::try_from(network_settings.remove("skipTurnsPerTurnAhead").unwrap()).unwrap() as usize,
-    ), kay::Tuning::default());
 
     setup_common(&mut system);
     debug::setup(&mut system);
@@ -81,9 +84,10 @@ pub fn start() {
     households_browser::setup(&mut system);
     vegetation_browser::setup(&mut system);
 
-    js! {
-        window.cbTypeIdMapping = @{Serde(system.get_actor_type_id_to_name_mapping())}
-    }
+    js::call(
+        "setTypeIdMapping",
+        &[js::to_js(&system.get_actor_type_id_to_name_mapping())],
+    );
 
     system.networking_connect();
 
@@ -97,7 +101,7 @@ pub fn start() {
 
     system.process_all_messages();
 
-    js! { console.log("After setup") }
+    js::console_log("After setup");
 
     let mut main_loop = MainLoop { skip_turns: 0 };
 
@@ -112,6 +116,7 @@ struct MainLoop {
 }
 
 impl MainLoop {
+    #[allow(static_mut_refs)]
     fn frame(&mut self) {
         let system = unsafe { &mut *SYSTEM };
         let world = &mut system.world();
@@ -128,17 +133,15 @@ impl MainLoop {
             system.process_all_messages();
         }
 
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                system: {
-                    networkingTurns: {"$set": @{Serde(system.networking_debug_all_n_turns())}},
-                    queueLengths: {"$set": @{Serde(system.get_queue_lengths())}},
-                    messageStats: {"$set": @{Serde(system.get_message_statistics())}},
-                }
-            }));
-
-            window.cbReactApp.onFrame();
-        }
+        js::call(
+            "systemStats",
+            &[
+                js::to_js(&system.networking_debug_all_n_turns()),
+                js::to_js(&system.get_queue_lengths()),
+                js::to_js(&system.get_message_statistics()),
+            ],
+        );
+        js::call0("onFrame");
 
         if self.skip_turns == 0 {
             system.reset_message_statistics();
@@ -155,37 +158,77 @@ impl MainLoop {
             }
         }
 
-        ::stdweb::web::window().request_animation_frame(move |_| next.frame());
+        request_animation_frame(next);
     }
 }
 
-use stdweb::serde::Serde;
+fn request_animation_frame(main_loop: MainLoop) {
+    let callback = Closure::once(move || {
+        let mut main_loop = main_loop;
+        main_loop.frame();
+    });
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn point_in_area(point: Serde<descartes::P2>, area: Serde<descartes::Area>) -> bool {
-    use ::descartes::PointContainer;
-    area.0.contains(point.0)
+    js::window()
+        .request_animation_frame(callback.as_ref().unchecked_ref())
+        .expect("requestAnimationFrame failed");
+
+    callback.forget();
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
+#[wasm_bindgen]
+pub fn point_in_area(point: JsValue, area: JsValue) -> bool {
+    use ::descartes::PointContainer;
+
+    match (
+        js::from_js::<descartes::P2>(point),
+        js::from_js::<descartes::Area>(area),
+    ) {
+        (Some(point), Some(area)) => area.contains(point),
+        _ => false,
+    }
+}
+
+#[wasm_bindgen]
 pub fn point_close_to_path(
-    point: Serde<descartes::P2>,
-    path: Serde<descartes::LinePath>,
-    max_distance_right: Serde<descartes::N>,
-    max_distance_left: Serde<descartes::N>,
-) -> Serde<Option<(descartes::P2, descartes::P2, descartes::V2)>> {
+    point: JsValue,
+    path: JsValue,
+    max_distance_right: JsValue,
+    max_distance_left: JsValue,
+) -> JsValue {
     use ::descartes::WithUniqueOrthogonal;
-    Serde(
-        path.0
-            .project(point.0)
-            .and_then(|(distance, projected_point)| {
-                let direction = path.0.direction_along(distance);
-                let orth_distance = (point.0 - projected_point).dot(&direction.orthogonal_right());
-                if orth_distance >= -max_distance_left.0 && orth_distance <= max_distance_right.0 {
-                    Some((point.0, projected_point, direction))
-                } else {
-                    None
-                }
-            }),
-    )
+
+    let (point, path, max_distance_right, max_distance_left): (
+        descartes::P2,
+        descartes::LinePath,
+        descartes::N,
+        descartes::N,
+    ) = match (
+        js::from_js(point),
+        js::from_js(path),
+        js::from_js(max_distance_right),
+        js::from_js(max_distance_left),
+    ) {
+        (Some(point), Some(path), Some(max_distance_right), Some(max_distance_left)) => (
+            point,
+            path,
+            max_distance_right,
+            max_distance_left,
+        ),
+        _ => return JsValue::NULL,
+    };
+
+    let result = path
+        .project(point)
+        .and_then(|(distance, projected_point)| {
+            let direction = path.direction_along(distance);
+            let orth_distance =
+                (point - projected_point).dot(&direction.orthogonal_right());
+            if orth_distance >= -max_distance_left && orth_distance <= max_distance_right {
+                Some((point, projected_point, direction))
+            } else {
+                None
+            }
+        });
+
+    js::to_js(&result)
 }

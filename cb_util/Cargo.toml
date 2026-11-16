@@ -6,7 +6,7 @@ license = "AGPL-3.0"
 build = "./build.rs"
 
 [dependencies]
-rand = { version = "0.5", features = ["stdweb"] }
+rand = { version = "0.5" }
 fnv = "1.0.6"
 serde = "1.0"
 serde_derive = "1.0"
@@ -27,3 +27,6 @@ kay_codegen = {version = "0.3.10", features = ["serde-serialization"]}
 
 [features]
 server = ['notify', 'serde_yaml']
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"

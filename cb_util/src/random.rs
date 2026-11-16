@@ -1,7 +1,35 @@
-pub use rand::{Rng, RngCore, thread_rng};
+pub use rand::{Rng, RngCore};
 pub use uuid::Uuid;
 use fnv::FnvHasher;
 use std::hash::{Hash, Hasher};
+
+// Native builds take entropy from the OS. WebAssembly builds have no OS, and
+// the `stdweb` feature rand 0.5 used for this is gone (stdweb itself is dead),
+// so the browser gets a ChaCha stream seeded from Math.random instead.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+pub use rand::thread_rng;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub fn thread_rng() -> ::rand::chacha::ChaChaRng {
+    use ::rand::SeedableRng;
+    use std::cell::RefCell;
+
+    thread_local! {
+        static RNG: RefCell<Option<::rand::chacha::ChaChaRng>> = RefCell::new(None);
+    }
+
+    RNG.with(|rng| {
+        let mut rng = rng.borrow_mut();
+        if rng.is_none() {
+            let mut seed = [0u8; 32];
+            for byte in seed.iter_mut() {
+                *byte = (::js_sys::Math::random() * 256.0) as u8;
+            }
+            *rng = Some(::rand::chacha::ChaChaRng::from_seed(seed));
+        }
+        rng.as_ref().unwrap().clone()
+    })
+}
 
 // A hashing function with hopefully low correlation between seeds
 // but not necessarily good randomness of sequential probes on the same seed

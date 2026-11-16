@@ -5,9 +5,9 @@
     "build-html": "node buildHtml.js",
     "build-js": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && npm run build-css && npm run build-js-bundle && npm run build-html",
     "watch-js": "node buildJs.js --watch",
-    "build-rust": "cargo-web build --release && node copyWasm.js",
-    "build": "npm run build-rust && npm run build-js",
-    "start": "npm run build-rust && npm run watch-js",
+    "build-wasm": "cargo build --release --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir target/wasm-bindgen --out-name cb_browser_ui target/wasm32-unknown-unknown/release/cb_browser_ui.wasm && node copyWasm.js",
+    "build": "npm run build-wasm && npm run build-js",
+    "start": "npm run build-wasm && npm run watch-js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

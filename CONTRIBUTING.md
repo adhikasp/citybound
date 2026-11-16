@@ -58,13 +58,22 @@ The original build setup stopped working years ago (older than the code itself):
 `deasync` module that does not build on current Node, and the code did not compile
 on the Windows backend at all. This fork keeps the game buildable:
 
-* **Rust is pinned to `nightly-2020-03-10`** by `rust-toolchain.toml`. Several
-  dependencies (`compact`, `chunky`, …) use nightly-only features that have since
-  been removed from the compiler, so a newer toolchain cannot build them. Don't
-  "upgrade" the pin without replacing those crates first.
-* **`cargo-web` is pinned to `0.6.26`** (installed by `npm run ensure-tooling`).
-  The browser UI is a `stdweb` 0.4 / `cargo-web` app; moving off it means a rewrite
-  to `wasm-bindgen`.
+* **The server builds on `nightly-2026-11-13`** (pinned in `rust-toolchain.toml`).
+  The two kernel crates it depends on are vendored under `vendor/` and patched
+  minimally, because they were published in 2020 with nightly features that have
+  since been removed: `kay` (`optin_builtin_traits`, `box_syntax`,
+  `std::intrinsics::type_id`) and `chunky` (a vestigial `vec_resize_default`).
+  `compact`, `descartes` and `michelangelo` build unchanged — they only need
+  `specialization`, which is still available on nightly.
+* **The browser client uses `wasm-bindgen`**, not `stdweb`/`cargo-web`: the crate
+  builds with plain `cargo build --target wasm32-unknown-unknown` and is processed
+  by `wasm-bindgen-cli` (install the version matching the `wasm-bindgen` crate —
+  currently 0.2.130 — e.g. the prebuilt release tarball, or `cargo install
+  wasm-bindgen-cli`). `npm run build-wasm` in `cb_browser_ui/` does the two steps.
+* **The Rust <-> JS boundary is one module, `cb_browser_ui/src/host.js`.** All the
+  React state patching lives there; Rust only passes plain data and calls
+  `window.cbHost.<function>` through `src/js.rs`. Adding a new UI update means
+  adding a host function and a three-line call, never a `js!` block.
 * **The JS bundle is built with `esbuild`** (`cb_browser_ui/buildJs.js`) and the
   stylesheet with `lessc`, replacing `parcel-bundler` 1.x.
 * `cb_util/src/config_manager/mod.rs` used the macOS-only `notify::FsEventWatcher`
@@ -72,6 +81,10 @@ on the Windows backend at all. This fork keeps the game buildable:
   actually returns on every platform.
 * Git dependencies (`rust-embed-flag`, `noise`) are pinned to commit SHAs so the
   build does not drift when their branches move.
+
+Note: the server and the browser client must be built by the same compiler.
+`compact` relies on unstable `specialization`, so different rustc versions lay the
+same structs out differently and the two sides corrupt each other's messages.
 
 ## Guidelines
 

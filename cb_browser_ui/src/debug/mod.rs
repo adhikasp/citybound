@@ -1,7 +1,7 @@
 use kay::TypedID;
-use stdweb::serde::Serde;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use stdweb::js_export;
+use wasm_bindgen::prelude::*;
+
+use js;
 use SYSTEM;
 
 use cb_planning::GestureID;
@@ -10,8 +10,14 @@ use planning::{CBPlanManagerID, CBGestureIntent};
 use transport::transport_planning::RoadLaneConfig;
 use descartes::{Corner};
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn plan_grid(project_id: Serde<ProjectID>, n: Serde<isize>, n_lanes: Serde<u8>, spacing: Serde<f32>) {
+#[wasm_bindgen]
+pub fn plan_grid(project_id: JsValue, n: f64, n_lanes: u8, spacing: f32) {
+    let project_id: ProjectID = match js::from_js(project_id) {
+        Some(project_id) => project_id,
+        None => return,
+    };
+    let n = n as isize;
+
     let system = unsafe { &mut *SYSTEM };
     let world = &mut system.world();
 
@@ -20,46 +26,46 @@ pub fn plan_grid(project_id: Serde<ProjectID>, n: Serde<isize>, n_lanes: Serde<u
     use ::transport::transport_planning::RoadIntent;
     use ::descartes::P2;
 
-    for x in -n.0 / 2..n.0 / 2 {
+    for x in -n / 2..n / 2 {
         let id = GestureID::new();
-        let p1 = P2::new(x as f32 * spacing.0, (-n.0 / 2) as f32 * spacing.0);
-        let p2 = P2::new(x as f32 * spacing.0, (n.0 / 2) as f32 * spacing.0);
+        let p1 = P2::new(x as f32 * spacing, (-n / 2) as f32 * spacing);
+        let p2 = P2::new(x as f32 * spacing, (n / 2) as f32 * spacing);
         let d = (p2 - p1).normalize();
         plan_manager.start_new_gesture(
-            project_id.0,
+            project_id,
             id,
             CBGestureIntent::Road(RoadIntent::new(
                 vec![Corner::new(p1, Some(d), Some(d)), Corner::new(p2, Some(d), Some(d))],
                 RoadLaneConfig {
-                    n_lanes_forward: n_lanes.0,
-                    n_lanes_backward: n_lanes.0
-                }
+                    n_lanes_forward: n_lanes,
+                    n_lanes_backward: n_lanes,
+                },
             )),
             world,
         );
     }
 
-    for y in -n.0 / 2..n.0 / 2 {
+    for y in -n / 2..n / 2 {
         let id = GestureID::new();
-        let p1 = P2::new((-n.0 / 2) as f32 * spacing.0, y as f32 * spacing.0);
-        let p2 = P2::new((n.0 / 2) as f32 * spacing.0, y as f32 * spacing.0);
+        let p1 = P2::new((-n / 2) as f32 * spacing, y as f32 * spacing);
+        let p2 = P2::new((n / 2) as f32 * spacing, y as f32 * spacing);
         let d = (p2 - p1).normalize();
         plan_manager.start_new_gesture(
-            project_id.0,
+            project_id,
             id,
             CBGestureIntent::Road(RoadIntent::new(
                 vec![Corner::new(p1, Some(d), Some(d)), Corner::new(p2, Some(d), Some(d))],
                 RoadLaneConfig {
-                    n_lanes_forward: n_lanes.0,
-                    n_lanes_backward: n_lanes.0
-                }
+                    n_lanes_forward: n_lanes,
+                    n_lanes_backward: n_lanes,
+                },
             )),
             world,
         );
     }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
+#[wasm_bindgen]
 pub fn spawn_cars(tries_per_lane: usize) {
     let system = unsafe { &mut *SYSTEM };
     let world = &mut system.world();
@@ -92,50 +98,29 @@ impl LogRecipient for LogUI {
         effective_text_start: u32,
         _: &mut World,
     ) {
-        js! {
-            const entries = @{Serde(entries)};
-            const text = @{Serde(text)};
-            if (window.cbReactApp.state.debug.logLastEntry == @{effective_last as u32}) {
-                // append
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    debug: {
-                        logLastEntry: {"$apply": n => n + @{entries.len() as u32}},
-                        logEntries: {"$push": entries},
-                        logText: {"$apply": t => t + text}
-                    }
-                }));
-            } else {
-                // replace, keep offset
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    debug: {
-                        logLastEntry: {"$set": @{effective_last + entries.len() as u32}},
-                        logTextStart: {"$set": @{effective_text_start}},
-                        logFirstEntry: {"$set": @{effective_last}},
-                        logEntries: {"$set": entries},
-                        logText: {"$set": text}
-                    }
-                }));
-            }
-        };
+        js::call(
+            "appendLog",
+            &[
+                js::to_js(entries),
+                js::to_js(text),
+                JsValue::from_f64(effective_last as f64),
+                JsValue::from_f64(effective_last as f64),
+                JsValue::from_f64(effective_text_start as f64),
+            ],
+        );
     }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
+#[wasm_bindgen]
 pub fn get_newest_log_messages() {
     let system = unsafe { &mut *SYSTEM };
     let world = &mut system.world();
 
-    use ::stdweb::unstable::TryInto;
-
-    let last_log_entry: u32 = js! {
-        return window.cbReactApp.state.debug.logLastEntry;
-    }
-    .try_into()
-    .unwrap();
+    let last_log_entry: f64 = js::from_js(js::call0("logLastEntry")).unwrap_or(0.0);
 
     // TODO: ugly
     LogID::global_broadcast(world).get_after(
-        last_log_entry,
+        last_log_entry as u32,
         500,
         LogUIID::local_first(world).into(),
         world,

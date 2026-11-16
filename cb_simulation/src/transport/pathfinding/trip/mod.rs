@@ -219,7 +219,7 @@ use rand::Rng;
 
 impl Sleeper for TripCreator {
     fn wake(&mut self, current_instant: Instant, world: &mut World) {
-        ::rand::thread_rng().shuffle(&mut self.lanes);
+        ::cb_util::random::thread_rng().shuffle(&mut self.lanes);
 
         for mut pair in &self.lanes.iter().chunks(2) {
             if let (Some(source), Some(dest)) = (pair.next(), pair.next()) {

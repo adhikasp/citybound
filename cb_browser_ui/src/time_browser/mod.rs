@@ -1,7 +1,7 @@
 use kay::{World, ActorSystem, Actor, TypedID};
-use stdweb::serde::Serde;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use stdweb::js_export;
+use wasm_bindgen::prelude::*;
+
+use js;
 use SYSTEM;
 use browser_utils::{FrameListener, FrameListenerID};
 
@@ -9,7 +9,7 @@ use cb_time::actors::TimeID;
 use cb_time::actors::ui::{TimeUI, TimeUIID};
 use cb_time::units::{TimeOfDay, Instant};
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
+#[wasm_bindgen]
 pub fn set_sim_speed(new_speed: u16) {
     let system = unsafe { &mut *SYSTEM };
     let world = &mut system.world();
@@ -35,17 +35,14 @@ impl FrameListener for BrowserTimeUI {
 
 impl TimeUI for BrowserTimeUI {
     fn on_time_info(&mut self, current_instant: Instant, speed: u16, _world: &mut World) {
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                time: {
-                    ticks: {"$set": @{current_instant.ticks() as u32}},
-                    time: {"$set": @{
-                        Serde(TimeOfDay::from(current_instant).hours_minutes())
-                    }},
-                    speed: {"$set": @{speed}}
-                }
-            }))
-        }
+        js::call(
+            "timeInfo",
+            &[
+                JsValue::from_f64(current_instant.ticks() as f64),
+                js::to_js(&TimeOfDay::from(current_instant).hours_minutes()),
+                JsValue::from_f64(speed as f64),
+            ],
+        );
     }
 }
 

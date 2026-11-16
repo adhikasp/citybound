@@ -1,3 +1,3 @@
 const fs = require("fs");
 fs.existsSync("dist") || fs.mkdirSync("dist");
-fs.copyFileSync("target/wasm32-unknown-unknown/release/cb_browser_ui.wasm", "dist/cb_browser_ui.wasm");
+fs.copyFileSync("target/wasm-bindgen/cb_browser_ui_bg.wasm", "dist/cb_browser_ui_bg.wasm");

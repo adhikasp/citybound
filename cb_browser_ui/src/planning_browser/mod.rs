@@ -1,4 +1,3 @@
-use stdweb::serde::Serde;
 use kay::{World, Actor, External, ActorSystem, TypedID};
 use compact::{CHashMap};
 use std::collections::HashMap;
@@ -13,103 +12,116 @@ use cb_planning::plan_manager::ui::{PlanningUI, PlanningUIID};
 use planning::{CBPlanningLogic, CBPlanManagerID, CBGestureIntent, CBPrototypeKind};
 use land_use::zone_planning::{LandUse, LAND_USES, ZoneIntent, ZoneConfig};
 use browser_utils::{updated_groups_to_js, to_js_mesh, FrameListener, FrameListenerID};
+use wasm_bindgen::prelude::*;
 
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use stdweb::js_export;
+use js;
 use SYSTEM;
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn start_new_gesture(
-    project_id: Serde<ProjectID>,
-    gesture_id: Serde<GestureID>,
-    intent: Serde<CBGestureIntent>,
-) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).start_new_gesture(
-        project_id.0,
-        gesture_id.0,
-        intent.0,
-        world,
-    )
+#[wasm_bindgen]
+pub fn start_new_gesture(project_id: JsValue, gesture_id: JsValue, intent: JsValue) {
+    if let (Some(project_id), Some(gesture_id), Some(intent)) = (
+        js::from_js::<ProjectID>(project_id),
+        js::from_js::<GestureID>(gesture_id),
+        js::from_js::<CBGestureIntent>(intent),
+    ) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).start_new_gesture(
+            project_id,
+            gesture_id,
+            intent,
+            world,
+        )
+    }
 }
 
 use descartes::{Corner};
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn with_control_point_added(
-    intent: Serde<CBGestureIntent>,
-    point: Serde<P2>,
-    add_to_end: bool,
-) -> Serde<CBGestureIntent> {
-    Serde(match intent.0 {
+#[wasm_bindgen]
+pub fn with_control_point_added(intent: JsValue, point: JsValue, add_to_end: bool) -> JsValue {
+    let (intent, point): (CBGestureIntent, P2) =
+        match (js::from_js(intent), js::from_js(point)) {
+            (Some(intent), Some(point)) => (intent, point),
+            _ => return JsValue::NULL,
+        };
+
+    js::to_js(&match intent {
         CBGestureIntent::Road(road_intent) => CBGestureIntent::Road(RoadIntent {
             path: road_intent
                 .path
-                .with_corner_added(add_to_end, Corner::new(point.0, None, None)),
+                .with_corner_added(add_to_end, Corner::new(point, None, None)),
             ..road_intent
         }),
         CBGestureIntent::Zone(zone_intent) => CBGestureIntent::Zone(ZoneIntent {
             boundary: zone_intent
                 .boundary
-                .with_corner_added(add_to_end, Corner::new(point.0, None, None)),
+                .with_corner_added(add_to_end, Corner::new(point, None, None)),
             ..zone_intent
         }),
         other => other,
     })
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn set_intent(
-    project_id: Serde<ProjectID>,
-    gesture_id: Serde<GestureID>,
-    intent: Serde<CBGestureIntent>,
-    commit: bool,
-) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).set_intent(
-        project_id.0,
-        gesture_id.0,
-        intent.0,
-        commit,
-        world,
-    )
+#[wasm_bindgen]
+pub fn set_intent(project_id: JsValue, gesture_id: JsValue, intent: JsValue, commit: bool) {
+    if let (Some(project_id), Some(gesture_id), Some(intent)) = (
+        js::from_js::<ProjectID>(project_id),
+        js::from_js::<GestureID>(gesture_id),
+        js::from_js::<CBGestureIntent>(intent),
+    ) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).set_intent(
+            project_id,
+            gesture_id,
+            intent,
+            commit,
+            world,
+        )
+    }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn undo(project_id: Serde<ProjectID>) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).undo(project_id.0, world)
+#[wasm_bindgen]
+pub fn undo(project_id: JsValue) {
+    if let Some(project_id) = js::from_js::<ProjectID>(project_id) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).undo(project_id, world)
+    }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn redo(project_id: Serde<ProjectID>) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).redo(project_id.0, world)
+#[wasm_bindgen]
+pub fn redo(project_id: JsValue) {
+    if let Some(project_id) = js::from_js::<ProjectID>(project_id) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).redo(project_id, world)
+    }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn implement_project(project_id: Serde<ProjectID>) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).implement(project_id.0, world);
+#[wasm_bindgen]
+pub fn implement_project(project_id: JsValue) {
+    if let Some(project_id) = js::from_js::<ProjectID>(project_id) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).implement(project_id, world);
+    }
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn start_new_project(project_id: Serde<ProjectID>) {
-    let system = unsafe { &mut *SYSTEM };
-    let world = &mut system.world();
-    CBPlanManagerID::global_first(world).start_new_project(project_id.0, world);
+#[wasm_bindgen]
+pub fn start_new_project(project_id: JsValue) {
+    if let Some(project_id) = js::from_js::<ProjectID>(project_id) {
+        let system = unsafe { &mut *SYSTEM };
+        let world = &mut system.world();
+        CBPlanManagerID::global_first(world).start_new_project(project_id, world);
+    }
 }
 
 use transport::transport_planning::{RoadIntent, RoadLaneConfig};
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn new_road_intent(n_lanes_forward: usize, n_lanes_backward: usize) -> Serde<RoadIntent> {
-    Serde(RoadIntent::new(
+#[wasm_bindgen]
+pub fn new_road_intent(n_lanes_forward: usize, n_lanes_backward: usize) -> JsValue {
+    js::to_js(&RoadIntent::new(
         vec![],
         RoadLaneConfig {
             n_lanes_forward: n_lanes_forward as u8,
@@ -118,16 +130,21 @@ pub fn new_road_intent(n_lanes_forward: usize, n_lanes_backward: usize) -> Serde
     ))
 }
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn new_zone_intent(new_land_use: Serde<LandUse>) -> Serde<ZoneIntent> {
-    Serde(ZoneIntent {
+#[wasm_bindgen]
+pub fn new_zone_intent(new_land_use: JsValue) -> JsValue {
+    let new_land_use: LandUse = match js::from_js(new_land_use) {
+        Some(new_land_use) => new_land_use,
+        None => return JsValue::NULL,
+    };
+
+    js::to_js(&ZoneIntent {
         boundary: EditArcLinePath::new(
             vec![],
             ResolutionStrategy::AssumeLines,
             Closedness::AlwaysClosed,
         ),
         config: ZoneConfig {
-            land_use: new_land_use.0,
+            land_use: new_land_use,
             max_height: None,
             set_back: None,
         },
@@ -207,13 +224,10 @@ impl BrowserPlanningUI {
     pub fn spawn(id: BrowserPlanningUIID, _world: &mut World) -> BrowserPlanningUI {
         {
             for (name, mesh) in static_meshes() {
-                js! {
-                    window.cbReactApp.boundSetState(oldState => update(oldState, {
-                        planning: {rendering: {staticMeshes: {
-                            [@{name}]: {"$set": @{to_js_mesh(&mesh)}}
-                        }}}
-                    }));
-                }
+                js::call(
+                    "planningStaticMesh",
+                    &[JsValue::from_str(name), to_js_mesh(&mesh)],
+                );
             }
         }
 
@@ -244,8 +258,6 @@ impl BrowserPlanningUI {
 
 impl FrameListener for BrowserPlanningUI {
     fn on_frame(&mut self, world: &mut World) {
-        use stdweb::unstable::TryInto;
-
         CBPlanManagerID::global_first(world).get_all_plans(
             self.id_as(),
             self.master_plan.as_known_state(),
@@ -256,12 +268,7 @@ impl FrameListener for BrowserPlanningUI {
             world,
         );
 
-        let maybe_current_project_id: Result<Serde<ProjectID>, _> = js! {
-            return (window.cbReactApp.state.uiMode == "planning" &&
-                window.cbReactApp.state.planning.currentProject);
-        }
-        .try_into();
-        if let Ok(Serde(current_project_id)) = maybe_current_project_id {
+        if let Some(current_project_id) = js::from_js::<ProjectID>(js::call0("currentProjectId")) {
             if !self.awaiting_preview_update {
                 CBPlanManagerID::global_first(world).get_project_preview_update(
                     self.id_as(),
@@ -284,60 +291,30 @@ impl PlanningUI<CBPlanningLogic> for BrowserPlanningUI {
     ) {
         if !master_update.is_empty() {
             self.master_plan.apply_update(master_update);
-            js! {
-                window.cbReactApp.boundSetState(oldState => update(oldState, {
-                    planning: {
-                        master: {"$set": @{Serde(&self.master_plan)}},
-                    }
-                }));
-                console.log("Got master plan update");
-            }
+            js::call("planningMaster", &[js::to_js(&self.master_plan)]);
         }
         for (project_id, project_update) in project_updates.pairs() {
             match project_update {
                 ProjectUpdate::None => {}
                 ProjectUpdate::ChangedOngoing(new_ongoing) => {
-                    js! {
-                        window.cbReactApp.boundSetState(oldState => update(oldState, {
-                            planning: {
-                                projects: {
-                                    [@{Serde(*project_id)}]: {
-                                        ongoing: {"$set": @{Serde(new_ongoing)}}
-                                    }
-                                }
-                            }
-                        }));
-                        console.log("Changed ongoing project");
-                    }
+                    js::call(
+                        "projectOngoing",
+                        &[js::to_js(project_id), js::to_js(new_ongoing)],
+                    );
                     self.projects
                         .get_mut(project_id)
                         .expect("Should already have project")
                         .set_ongoing_step(new_ongoing.clone());
                 }
                 ProjectUpdate::ChangedCompletely(new_project) => {
-                    js! {
-                        window.cbReactApp.boundSetState(oldState => update(oldState, {
-                            planning: {
-                                projects: {
-                                    [@{Serde(*project_id)}]: {"$set": @{Serde(new_project)}}
-                                }
-                            }
-                        }));
-                        console.log("Replaced ongoing project");
-                    }
+                    js::call(
+                        "projectSet",
+                        &[js::to_js(project_id), js::to_js(new_project)],
+                    );
                     self.projects.insert(*project_id, new_project.clone());
                 }
                 ProjectUpdate::Removed => {
-                    js! {
-                       window.cbReactApp.boundSetState(oldState => update(oldState, {
-                           planning: {
-                               projects: {
-                                   "$unset": [@{Serde(*project_id)}]
-                               }
-                           }
-                       }));
-                       console.log("Removed ongoing project");
-                    }
+                    js::call("projectUnset", &[js::to_js(project_id)]);
                     self.projects.remove(project_id);
                 }
             }
@@ -524,45 +501,35 @@ impl PlanningUI<CBPlanningLogic> for BrowserPlanningUI {
                 lanes_to_construct_marker_gaps_add,
             );
 
-        let updated_zones_all_groups: ::stdweb::Object = self
-            .zone_groupers
-            .iter_mut()
-            .map(|(land_use, grouper)| {
-                let rem = zones_rem
-                    .remove(land_use)
-                    .expect("Should have land use removes");
-                let add = zones_add
-                    .remove(land_use)
-                    .expect("Should have land use adds");
-                let updated_groups_js = updated_groups_to_js(grouper.update(rem, add));
-                let add_op: ::stdweb::Object = Some(("$add", updated_groups_js))
-                    .into_iter()
-                    .collect::<HashMap<_, _>>()
-                    .into();
-                (land_use.to_string(), add_op)
-            })
-            .collect::<HashMap<_, _>>()
-            .into();
+        let updated_zones_all_groups = js::empty_object();
+        for (land_use, grouper) in self.zone_groupers.iter_mut() {
+            let rem = zones_rem
+                .remove(land_use)
+                .expect("Should have land use removes");
+            let add = zones_add
+                .remove(land_use)
+                .expect("Should have land use adds");
+            js::object_set(
+                &updated_zones_all_groups,
+                &land_use.to_string(),
+                js::object(vec![("$add", updated_groups_to_js(grouper.update(rem, add)))]),
+            );
+        }
 
-        let updated_zones_all_outline_groups: ::stdweb::Object = self
-            .zone_outline_groupers
-            .iter_mut()
-            .map(|(land_use, grouper)| {
-                let rem = zone_outlines_rem
-                    .remove(land_use)
-                    .expect("Should have land use removes");
-                let add = zone_outlines_add
-                    .remove(land_use)
-                    .expect("Should have land use adds");
-                let updated_groups_js = updated_groups_to_js(grouper.update(rem, add));
-                let add_op: ::stdweb::Object = Some(("$add", updated_groups_js))
-                    .into_iter()
-                    .collect::<HashMap<_, _>>()
-                    .into();
-                (land_use.to_string(), add_op)
-            })
-            .collect::<HashMap<_, _>>()
-            .into();
+        let updated_zones_all_outline_groups = js::empty_object();
+        for (land_use, grouper) in self.zone_outline_groupers.iter_mut() {
+            let rem = zone_outlines_rem
+                .remove(land_use)
+                .expect("Should have land use removes");
+            let add = zone_outlines_add
+                .remove(land_use)
+                .expect("Should have land use adds");
+            js::object_set(
+                &updated_zones_all_outline_groups,
+                &land_use.to_string(),
+                js::object(vec![("$add", updated_groups_to_js(grouper.update(rem, add)))]),
+            );
+        }
 
         let updated_building_outlines_groups = self
             .building_outlines_grouper
@@ -603,37 +570,30 @@ impl PlanningUI<CBPlanningLogic> for BrowserPlanningUI {
                 })
                 .collect();
 
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                planning: {rendering: {
-                    currentPreview: {
-                        lanesToConstructGroups: {
-                            "$add": @{updated_groups_to_js(
-                                updated_lanes_to_construct_groups
-                            )}
-                        },
-                        lanesToConstructMarkerGroups: {
-                            "$add": @{updated_groups_to_js(
-                                updated_lanes_to_construct_marker_groups
-                            )}
-                        },
-                        lanesToConstructMarkerGapsGroups: {
-                            "$add": @{updated_groups_to_js(
-                                updated_lanes_to_construct_marker_gaps_groups
-                            )}
-                        },
-                        zoneGroups: @{updated_zones_all_groups},
-                        zoneOutlineGroups: @{updated_zones_all_outline_groups},
-                        buildingOutlinesGroup: {
-                            "$add": @{updated_groups_to_js(
-                                updated_building_outlines_groups
-                            )}
-                        },
-                    },
-                    roadInfos: {"$set": @{Serde(road_infos)}},
-                }}
-            }));
-        }
+        js::call(
+            "planPreview",
+            &[js::object(vec![
+                (
+                    "lanes",
+                    updated_groups_to_js(updated_lanes_to_construct_groups),
+                ),
+                (
+                    "lanesMarker",
+                    updated_groups_to_js(updated_lanes_to_construct_marker_groups),
+                ),
+                (
+                    "lanesMarkerGaps",
+                    updated_groups_to_js(updated_lanes_to_construct_marker_gaps_groups),
+                ),
+                ("zones", updated_zones_all_groups),
+                ("zoneOutlines", updated_zones_all_outline_groups),
+                (
+                    "buildingOutlines",
+                    updated_groups_to_js(updated_building_outlines_groups),
+                ),
+                ("roadInfos", js::to_js(&road_infos)),
+            ])],
+        );
 
         self.result_preview.apply_update(result_update);
         self.actions_preview = new_actions.clone();

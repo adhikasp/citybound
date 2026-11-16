@@ -1,16 +1,16 @@
 use kay::{World, ActorSystem, TypedID};
-use stdweb::serde::Serde;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use stdweb::js_export;
+use wasm_bindgen::prelude::*;
+
+use js;
 use SYSTEM;
 
-#[cfg_attr(all(target_arch = "wasm32", target_os = "unknown"), js_export)]
-pub fn get_household_info(household_id: Serde<::economy::households::HouseholdID>) {
+#[wasm_bindgen]
+pub fn get_household_info(household_id: JsValue) {
     let system = unsafe { &mut *SYSTEM };
     let world = &mut system.world();
-    household_id
-        .0
-        .get_ui_info(BrowserHouseholdUIID::local_first(world).into(), world);
+    if let Some(household_id) = js::from_js::<::economy::households::HouseholdID>(household_id) {
+        household_id.get_ui_info(BrowserHouseholdUIID::local_first(world).into(), world);
+    }
 }
 
 #[derive(Compact, Clone)]
@@ -33,18 +33,6 @@ impl HouseholdUI for BrowserHouseholdUI {
         core: &::economy::households::HouseholdCore,
         _world: &mut World,
     ) {
-        // js! {
-        //     window.cbReactApp.boundSetState(oldState => update(oldState, {
-        //         households: {
-        //             householdInfo: {
-        //                 [@{Serde(id)}]: {"$set": {
-        //                     core: @{Serde(core)}
-        //                 }}
-        //             }
-        //         }
-        //     }));
-        // }
-
         // TODO: horrible workaround for Compact mis-serialising the best_offer COption (probably
         // because it's inside a CDict)
         let decision_state_workaround = match core.decision_state {
@@ -59,25 +47,21 @@ impl HouseholdUI for BrowserHouseholdUI {
             ref other => other.clone(),
         };
 
-        js! {
-            window.cbReactApp.boundSetState(oldState => update(oldState, {
-                households: {
-                    householdInfo: {
-                        [@{Serde(id)}]: {"$set": {
-                            core: {
-                                resources: @{Serde(&core.resources)},
-                                member_resources: @{Serde(&core.member_resources)},
-                                member_tasks: @{Serde(&core.member_tasks)},
-                                decision_state: @{Serde(decision_state_workaround)},
-                                used_offers: @{Serde(&core.used_offers)},
-                                member_used_offers: @{Serde(&core.member_used_offers)},
-                                provided_offers: @{Serde(&core.provided_offers)},
-                            }
-                        }}
-                    }
-                }
-            }));
-        }
+        js::call(
+            "householdInfo",
+            &[
+                js::to_js(&id),
+                js::object(vec![
+                    ("resources", js::to_js(&core.resources)),
+                    ("member_resources", js::to_js(&core.member_resources)),
+                    ("member_tasks", js::to_js(&core.member_tasks)),
+                    ("decision_state", js::to_js(&decision_state_workaround)),
+                    ("used_offers", js::to_js(&core.used_offers)),
+                    ("member_used_offers", js::to_js(&core.member_used_offers)),
+                    ("provided_offers", js::to_js(&core.provided_offers)),
+                ]),
+            ],
+        );
     }
 }
 

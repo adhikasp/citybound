@@ -20,3 +20,6 @@ pub mod async_counter;
 pub mod random;
 pub mod config_manager;
 pub mod log;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+extern crate js_sys;
