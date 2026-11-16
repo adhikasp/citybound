@@ -63,6 +63,8 @@ use std::{
     io::BufReader,
     sync::mpsc::{Receiver, channel},
 };
+#[cfg(feature = "server")]
+use std::sync::{Mutex, OnceLock};
 use cb_time::actors::{Temporal, TemporalID};
 use cb_time::units::{Instant};
 #[cfg(feature = "server")]
@@ -74,13 +76,28 @@ struct ConfigFileWatcherState {
     watcher: notify::RecommendedWatcher,
 }
 
+/// The `notify` watchers live outside the actor, keyed by config type + file.
+///
+/// This used to be a `kay::External<Option<ConfigFileWatcherState>>` field,
+/// which is the only way an actor can hold non-persistable state - but actor
+/// state is written into the mmap savegame and `External::decompact` restores
+/// the raw box pointer verbatim (`ptr::read`), so a watcher started before the
+/// save is a dangling pointer in the next process. That segfaulted every load
+/// of an existing city in this actor's `tick`, right after "Simulation
+/// running." Keeping the watcher in a process-global registry instead means
+/// the actor's own state is plain data, and the watcher is simply started
+/// again on the first tick after a load.
+#[cfg(feature = "server")]
+fn config_watchers() -> &'static Mutex<HashMap<String, ConfigFileWatcherState>> {
+    static WATCHERS: OnceLock<Mutex<HashMap<String, ConfigFileWatcherState>>> = OnceLock::new();
+    WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 #[derive(Compact, Clone)]
 pub struct ConfigFileWatcher<CD: Config + DeserializeOwned> {
     id: ConfigFileWatcherID<CD>,
     target: ConfigManagerID<CD>,
     file: CString,
-    #[cfg(feature = "server")]
-    state: kay::External<Option<ConfigFileWatcherState>>,
 }
 
 impl<CD: Config + DeserializeOwned> ConfigFileWatcher<CD> {
@@ -94,8 +111,6 @@ impl<CD: Config + DeserializeOwned> ConfigFileWatcher<CD> {
             id,
             target,
             file: file.clone(),
-            #[cfg(feature = "server")]
-            state: kay::External::new(None),
         }
     }
 
@@ -118,29 +133,41 @@ impl<CD: Config + DeserializeOwned> Temporal for ConfigFileWatcher<CD> {
         #[cfg(feature = "server")]
         {
             let file_path = (*self.file).to_owned();
-            if self.state.is_none() {
-                self.reload(world);
+            let key = format!("{}\u{0}{}", std::any::type_name::<CD>(), file_path);
+
+            let watching = {
+                let watchers = config_watchers().lock().unwrap();
+                watchers.contains_key(&key)
             };
-            let state = self.state.get_or_insert_with(|| {
-                let (tx, rx) = channel();
-                let mut watcher = notify::watcher(tx, std::time::Duration::from_secs(1)).unwrap();
-                watcher
-                    .watch(&file_path, notify::RecursiveMode::Recursive)
-                    .unwrap();
-                println!("Started watching config file . {:?}", &file_path);
 
-                ConfigFileWatcherState {
-                    receiver: rx,
-                    watcher,
-                }
-            });
+            if !watching {
+                self.reload(world);
 
-            match state.receiver.try_recv() {
-                Ok(event) => {
-                    println!("Config file updated. {:?} {:?}", &file_path, event);
-                    self.reload(world);
+                let mut watchers = config_watchers().lock().unwrap();
+                if !watchers.contains_key(&key) {
+                    let (sender, receiver) = channel();
+                    let mut watcher =
+                        notify::watcher(sender, std::time::Duration::from_secs(1)).unwrap();
+                    watcher
+                        .watch(&file_path, notify::RecursiveMode::Recursive)
+                        .unwrap();
+                    println!("Started watching config file . {:?}", &file_path);
+
+                    watchers.insert(key.clone(), ConfigFileWatcherState { receiver, watcher });
                 }
-                Err(_e) => {}
+                return;
+            }
+
+            let event = {
+                let mut watchers = config_watchers().lock().unwrap();
+                watchers
+                    .get_mut(&key)
+                    .and_then(|state| state.receiver.try_recv().ok())
+            };
+
+            if let Some(event) = event {
+                println!("Config file updated. {:?} {:?}", &file_path, event);
+                self.reload(world);
             }
         }
     }

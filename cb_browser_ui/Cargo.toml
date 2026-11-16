@@ -34,3 +34,7 @@ debug = true
 [patch.crates-io]
 kay = { path = "../vendor/kay" }
 chunky = { path = "../vendor/chunky" }
+# Same fix as the server's root Cargo.toml: the crates.io `compact` hands out a
+# misaligned empty slice (undefined behaviour). Both halves must use the
+# patched one.
+compact = { path = "../vendor/compact" }
