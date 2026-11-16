@@ -45,3 +45,6 @@ embed_assets = ["rust-embed-flag/embed_assets"]
 [patch.crates-io]
 kay = { path = "vendor/kay" }
 chunky = { path = "vendor/chunky" }
+# Patched: an empty CompactVec handed out a misaligned (0x1) zero-length slice,
+# which is UB and made sleeper queues read back as garbage under rustc 1.102.
+compact = { path = "vendor/compact" }

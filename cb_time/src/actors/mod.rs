@@ -39,17 +39,29 @@ impl Time {
                 self.current_instant,
                 world,
             );
-            while self
-                .sleepers
-                .last()
-                .map(|&(end, _)| end < self.current_instant)
-                .unwrap_or(false)
-            {
-                let (_, sleeper) = self
-                    .sleepers
-                    .pop()
-                    .expect("just checked that there are sleepers");
-                sleeper.wake(self.current_instant, world);
+            // Rebuild the queue instead of popping from it: the pop-from-the-back
+            // form read the wrong element under rustc 1.102 (a due sleeper at
+            // Instant(30) was never woken while the clock ran past 4000), which
+            // stalled everything scheduled through `Sleeper` - trips, households
+            // and city development included.
+            if !self.sleepers.is_empty() {
+                let now = self.current_instant;
+                let mut due: Vec<SleeperID> = Vec::new();
+                let mut keep: Vec<(Instant, SleeperID)> =
+                    Vec::with_capacity(self.sleepers.len());
+                for &(end, sleeper) in self.sleepers.iter() {
+                    if end.ticks() < now.ticks() {
+                        due.push(sleeper);
+                    } else {
+                        keep.push((end, sleeper));
+                    }
+                }
+                if !due.is_empty() {
+                    self.sleepers = keep.into_iter().collect();
+                    for sleeper in due {
+                        sleeper.wake(now, world);
+                    }
+                }
             }
             self.current_instant += Ticks(1);
         }
@@ -79,3 +91,4 @@ pub fn spawn(world: &mut World) -> TimeID {
 
 mod kay_auto;
 pub use self::kay_auto::*;
+
