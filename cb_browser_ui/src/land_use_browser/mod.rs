@@ -89,7 +89,7 @@ impl LandUseUI for BrowserLandUseUI {
                     .map(|(prop_type, instances)| {
                         js::array(vec![
                             js::to_js(&prop_type.to_string()),
-                            js::f32_array(flatten_instances(&instances)),
+                            js::f32_array(&flatten_instances(&instances)),
                         ])
                     })
                     .collect::<Vec<_>>();

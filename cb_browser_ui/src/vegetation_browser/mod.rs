@@ -270,18 +270,18 @@ impl FrameListener for BrowserVegetationUI {
             js::call(
                 "vegetationInstances",
                 &[js::object(vec![
-                    ("trunk", js::f32_array(flatten_instances(&trunk_instances))),
+                    ("trunk", js::f32_array(&flatten_instances(&trunk_instances))),
                     (
                         "small",
-                        js::f32_array(flatten_instances(&small_canopy_instances)),
+                        js::f32_array(&flatten_instances(&small_canopy_instances)),
                     ),
                     (
                         "medium",
-                        js::f32_array(flatten_instances(&medium_canopy_instances)),
+                        js::f32_array(&flatten_instances(&medium_canopy_instances)),
                     ),
                     (
                         "large",
-                        js::f32_array(flatten_instances(&large_canopy_instances)),
+                        js::f32_array(&flatten_instances(&large_canopy_instances)),
                     ),
                 ])],
             );

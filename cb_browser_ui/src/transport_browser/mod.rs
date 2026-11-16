@@ -72,7 +72,7 @@ impl FrameListener for BrowserTransportUI {
 
         js::call(
             "carInstances",
-            &[js::f32_array(flatten_instances(&car_instances))],
+            &[js::f32_array(&flatten_instances(&car_instances))],
         );
 
         if let Some(car_colors) = js::from_js::<Vec<[f64; 3]>>(js::call0("carColors")) {
