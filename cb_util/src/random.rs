@@ -27,7 +27,13 @@ pub fn thread_rng() -> ::rand::chacha::ChaChaRng {
             }
             *rng = Some(::rand::chacha::ChaChaRng::from_seed(seed));
         }
-        rng.as_ref().unwrap().clone()
+        // Draw a new seed from the stored stream (which advances it) and hand out
+        // a generator seeded from it. Simply cloning the stored generator, as
+        // this used to do, returned an identical stream every time - so every
+        // `uuid()` in the process was the same and, for example, a planned road
+        // grid collapsed into a single gesture.
+        let seed: [u8; 32] = rng.as_mut().unwrap().gen();
+        ::rand::chacha::ChaChaRng::from_seed(seed)
     })
 }
 
